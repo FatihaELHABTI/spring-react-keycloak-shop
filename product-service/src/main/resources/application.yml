@@ -1,0 +1,26 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: product-service
+  datasource:
+    url: jdbc:postgresql://localhost:5433/product_db
+    username: user
+    password: password
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:8080/realms/ecom-realm
+          jwk-set-uri: http://localhost:8080/realms/ecom-realm/protocol/openid-connect/certs
+
+# Pour la traçabilité (Demandé au point 12 du PDF)
+logging:
+  level:
+    org.springframework.security: DEBUG
+    ma.enset: DEBUG
