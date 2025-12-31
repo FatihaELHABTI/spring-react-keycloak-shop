@@ -1,0 +1,46 @@
+server:
+  port: 8888
+
+spring:
+  application:
+    name: api-gateway
+
+  cloud:
+    gateway:
+      # Configuration globale CORS (doit être ici, sous gateway)
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOrigins: "http://localhost:3000"
+            allowedMethods: "*"
+            allowedHeaders: "*"
+
+      # Filtres appliqués à toutes les routes
+      default-filters:
+        - TokenRelay
+
+      # Définition des routes vers les micro-services
+      routes:
+        - id: product-service
+          uri: lb://product-service
+          predicates:
+            - Path=/api/products/**
+
+        - id: order-service
+          uri: lb://order-service
+          predicates:
+            - Path=/api/orders/**
+
+  # Sécurité Keycloak
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:8080/realms/ecom-realm
+          jwk-set-uri: http://localhost:8080/realms/ecom-realm/protocol/openid-connect/certs
+
+# Configuration du client Eureka pour trouver le Discovery Service
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
