@@ -1,8 +1,10 @@
-// src/services/api.js
 import axios from "axios";
 import keycloak from "./keycloak";
 
-const api = axios.create({ baseURL: "http://localhost:8888" });
+const api = axios.create({
+    baseURL: "http://localhost:8888",
+    withCredentials: true // Très important pour le CORS
+});
 
 api.interceptors.request.use((config) => {
     if (keycloak.token) {
@@ -10,4 +12,5 @@ api.interceptors.request.use((config) => {
     }
     return config;
 });
+
 export default api;

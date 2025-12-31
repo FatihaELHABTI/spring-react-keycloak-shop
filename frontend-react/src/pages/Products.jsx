@@ -2,131 +2,149 @@ import React, { useEffect, useState } from 'react';
 import api from '../services/api';
 import { useKeycloak } from '@react-keycloak/web';
 import {
-    Plus, Trash2, Edit, X, Save,
-    Package, DollarSign, Layers,
-    AlertCircle, Loader2
+    Plus, ShoppingCart, Eye, Trash2, Edit, X, Save,
+    Check, Package, DollarSign, Layers, Loader2
 } from 'lucide-react';
+import toast, { Toaster } from 'react-hot-toast';
 
 const Products = () => {
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [isModalOpen, setIsModalOpen] = useState(false);
-
-    // État pour le produit en cours de création ou modification
-    const [currentProduct, setCurrentProduct] = useState({
-        name: '',
-        description: '',
-        price: '',
-        stockQuantity: ''
-    });
+    const [cart, setCart] = useState([]); // Gestion du panier local
+    const [selectedProduct, setSelectedProduct] = useState(null); // Pour la popup détails
+    const [isModalOpen, setIsModalOpen] = useState(false); // Pour le CRUD Admin
+    const [currentProduct, setCurrentProduct] = useState({ name: '', description: '', price: '', stockQuantity: '' });
 
     const { keycloak } = useKeycloak();
     const isAdmin = keycloak.hasRealmRole('ADMIN');
 
-    // 1. Charger les produits depuis le backend
+    useEffect(() => { fetchProducts(); }, []);
+
     const fetchProducts = async () => {
         setLoading(true);
         try {
             const res = await api.get('/api/products');
             setProducts(res.data);
         } catch (err) {
-            console.error("Erreur de chargement", err);
+            toast.error("Erreur de connexion au catalogue");
         } finally {
             setLoading(false);
         }
     };
 
-    useEffect(() => {
-        fetchProducts();
-    }, []);
-
-    // 2. Préparer l'ouverture de la modale
-    const openModal = (product = { name: '', description: '', price: '', stockQuantity: '' }) => {
-        setCurrentProduct(product);
-        setIsModalOpen(true);
+    // --- LOGIQUE DU PANIER ---
+    const addToCart = (product) => {
+        if (product.stockQuantity <= 0) {
+            toast.error("Rupture de stock !");
+            return;
+        }
+        setCart(prevCart => {
+            const existing = prevCart.find(item => item.id === product.id);
+            if (existing) {
+                toast.success(`Quantité augmentée pour ${product.name}`);
+                return prevCart.map(item =>
+                    item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
+                );
+            }
+            toast.success(`${product.name} ajouté au panier`);
+            return [...prevCart, { ...product, quantity: 1 }];
+        });
     };
 
-    // 3. Sauvegarder (Ajout ou Mise à jour)
+    const finalizeOrder = async () => {
+        if (cart.length === 0) return;
+        try {
+            // On prépare la liste : [{productId, quantity}, ...]
+            const orderItems = cart.map(item => ({
+                productId: item.id,
+                quantity: item.quantity
+            }));
+
+            await api.post('/api/orders', orderItems);
+            setCart([]); // Vider le panier
+            toast.success("Commande validée ! Le stock a été mis à jour.", { duration: 5000 });
+            fetchProducts(); // Rafraîchir les stocks affichés
+        } catch (err) {
+            toast.error("Échec de la commande : Stock insuffisant.");
+        }
+    };
+
+    // --- ACTIONS ADMIN (CRUD) ---
     const handleSave = async (e) => {
         e.preventDefault();
         try {
             if (currentProduct.id) {
-                // Mode Edition
                 await api.put(`/api/products/${currentProduct.id}`, currentProduct);
+                toast.success("Produit mis à jour");
             } else {
-                // Mode Création
                 await api.post('/api/products', currentProduct);
+                toast.success("Produit créé");
             }
             setIsModalOpen(false);
-            fetchProducts(); // Rafraîchir la liste
-        } catch (err) {
-            alert("Erreur lors de l'opération : " + (err.response?.status === 403 ? "Accès refusé" : "Erreur réseau"));
-        }
+            fetchProducts();
+        } catch (err) { toast.error("Erreur de permission ou réseau"); }
     };
 
-    // 4. Supprimer un produit
     const handleDelete = async (id) => {
-        if (window.confirm("Êtes-vous sûr de vouloir supprimer ce produit définitivement ?")) {
-            try {
-                await api.delete(`/api/products/${id}`);
-                fetchProducts();
-            } catch (err) {
-                console.error("Erreur de suppression", err);
-            }
+        if (window.confirm("Supprimer ce produit ?")) {
+            await api.delete(`/api/products/${id}`);
+            fetchProducts();
+            toast.success("Produit supprimé");
         }
     };
 
     return (
-        <div className="space-y-8 animate-in fade-in duration-500">
-            {/* Header de la page */}
+        <div className="space-y-8 pb-32">
+            <Toaster position="top-right" />
+
             <div className="flex justify-between items-end">
                 <div>
-                    <h2 className="text-4xl font-black text-gray-900 tracking-tight">Catalogue</h2>
-                    <p className="text-gray-500 font-medium">Gérez vos articles et suivez l'état de votre inventaire.</p>
+                    <h2 className="text-4xl font-black text-gray-900 tracking-tight">E-Catalogue</h2>
+                    <p className="text-gray-500 font-medium">Accumulez vos articles et validez votre panier.</p>
                 </div>
-                {isAdmin && (
-                    <button
-                        onClick={() => openModal()}
-                        className="bg-primary hover:scale-105 transition-all text-white px-6 py-3 rounded-2xl font-bold flex items-center shadow-xl shadow-indigo-200"
-                    >
-                        <Plus className="w-5 h-5 mr-2" /> Nouveau Produit
-                    </button>
-                )}
+                <div className="flex space-x-4">
+                    {!isAdmin && cart.length > 0 && (
+                        <button onClick={finalizeOrder} className="bg-emerald-500 text-white px-8 py-4 rounded-2xl font-black flex items-center shadow-xl shadow-emerald-100 animate-in slide-in-from-right">
+                            <Check className="mr-2" /> Valider la Commande ({cart.reduce((a,b) => a + b.quantity, 0)})
+                        </button>
+                    )}
+                    {isAdmin && (
+                        <button onClick={() => { setCurrentProduct({name:'', description:'', price:'', stockQuantity:''}); setIsModalOpen(true); }} className="bg-primary text-white px-6 py-4 rounded-2xl font-black flex items-center shadow-lg">
+                            <Plus className="mr-2" /> Nouveau Produit
+                        </button>
+                    )}
+                </div>
             </div>
 
-            {/* État de chargement */}
             {loading ? (
-                <div className="flex flex-col items-center justify-center p-20 space-y-4">
-                    <Loader2 className="w-12 h-12 text-primary animate-spin" />
-                    <p className="text-gray-400 font-bold animate-pulse">Synchronisation avec le stock...</p>
-                </div>
+                <div className="flex justify-center p-20"><Loader2 className="animate-spin text-primary w-12 h-12" /></div>
             ) : (
-                /* Grille des produits */
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                    {products.map(product => (
-                        <div key={product.id} className="group bg-white p-8 rounded-[2.5rem] shadow-sm border border-gray-100 hover:shadow-2xl transition-all duration-500 relative overflow-hidden">
-                            <div className="flex justify-between items-start mb-6">
+                    {products.map(p => (
+                        <div key={p.id} className="bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-sm hover:shadow-2xl transition-all group">
+                            <div className="flex justify-between mb-6">
                                 <div className="p-4 bg-gray-50 rounded-2xl text-primary group-hover:bg-primary group-hover:text-white transition-colors">
                                     <Package className="w-7 h-7" />
                                 </div>
                                 {isAdmin && (
                                     <div className="flex space-x-1">
-                                        <button onClick={() => openModal(product)} className="p-2 text-blue-500 hover:bg-blue-50 rounded-xl transition"><Edit className="w-5 h-5" /></button>
-                                        <button onClick={() => handleDelete(product.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition"><Trash2 className="w-5 h-5" /></button>
+                                        <button onClick={() => {setCurrentProduct(p); setIsModalOpen(true);}} className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg"><Edit className="w-4 h-4" /></button>
+                                        <button onClick={() => handleDelete(p.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4" /></button>
                                     </div>
                                 )}
                             </div>
+                            <h3 className="text-2xl font-black text-gray-800">{p.name}</h3>
+                            <p className="text-gray-400 text-sm font-medium mb-6">Stock disponible: {p.stockQuantity}</p>
 
-                            <h3 className="text-2xl font-black text-gray-800 mb-2">{product.name}</h3>
-                            <p className="text-gray-400 text-sm mb-8 line-clamp-2 font-medium">{product.description || "Aucune description fournie."}</p>
-
-                            <div className="flex items-center justify-between border-t border-gray-50 pt-6">
-                                <div>
-                                    <span className="text-3xl font-black text-gray-900">{product.price}</span>
-                                    <span className="ml-1 text-primary font-bold">DH</span>
-                                </div>
-                                <div className={`flex items-center px-3 py-1 rounded-full text-xs font-black ${product.stockQuantity > 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
-                                    {product.stockQuantity > 0 ? `Stock: ${product.stockQuantity}` : 'Rupture'}
+                            <div className="flex justify-between items-center pt-6 border-t border-gray-50">
+                                <span className="text-3xl font-black text-indigo-600">{p.price} DH</span>
+                                <div className="flex space-x-2">
+                                    <button onClick={() => setSelectedProduct(p)} className="p-3 bg-gray-50 text-gray-400 rounded-xl hover:text-primary transition"><Eye className="w-5 h-5" /></button>
+                                    {!isAdmin && (
+                                        <button onClick={() => addToCart(p)} disabled={p.stockQuantity <= 0} className="p-3 bg-gray-900 text-white rounded-xl hover:bg-primary disabled:bg-gray-100 transition shadow-lg">
+                                            <ShoppingCart className="w-5 h-5" />
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -134,87 +152,45 @@ const Products = () => {
                 </div>
             )}
 
-            {/* MODALE CRUD (Ajout / Modification) */}
+            {/* POPUP DÉTAILS PRODUIT */}
+            {selectedProduct && (
+                <div className="fixed inset-0 bg-secondary/40 backdrop-blur-md flex items-center justify-center z-50 p-6">
+                    <div className="bg-white w-full max-w-md rounded-[3rem] shadow-2xl p-10 relative animate-in zoom-in duration-200">
+                        <button onClick={() => setSelectedProduct(null)} className="absolute top-8 right-8 text-gray-300 hover:text-red-500"><X /></button>
+                        <div className="w-20 h-20 bg-indigo-50 rounded-3xl flex items-center justify-center text-primary mb-6"><Package className="w-10 h-10" /></div>
+                        <h2 className="text-4xl font-black text-gray-900 mb-4">{selectedProduct.name}</h2>
+                        <p className="text-gray-500 font-medium leading-relaxed mb-8">{selectedProduct.description || "Aucun détail technique supplémentaire."}</p>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="bg-gray-50 p-6 rounded-3xl text-center">
+                                <span className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Prix</span>
+                                <span className="text-2xl font-black text-primary">{selectedProduct.price} DH</span>
+                            </div>
+                            <div className="bg-gray-50 p-6 rounded-3xl text-center">
+                                <span className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Dispo</span>
+                                <span className="text-2xl font-black text-gray-800">{selectedProduct.stockQuantity} unités</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* MODALE CRUD ADMIN */}
             {isModalOpen && (
                 <div className="fixed inset-0 bg-secondary/60 backdrop-blur-md flex items-center justify-center z-50 p-4">
-                    <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in duration-300">
-                        <div className="p-10">
-                            <div className="flex justify-between items-center mb-8">
-                                <div>
-                                    <h3 className="text-3xl font-black text-gray-900">
-                                        {currentProduct.id ? 'Modifier l\'article' : 'Ajouter au catalogue'}
-                                    </h3>
-                                    <p className="text-gray-400 text-sm font-medium">Détails techniques du produit.</p>
-                                </div>
-                                <button onClick={() => setIsModalOpen(false)} className="p-2 bg-gray-50 rounded-full text-gray-400 hover:text-red-500 transition">
-                                    <X className="w-6 h-6" />
-                                </button>
-                            </div>
-
-                            <form onSubmit={handleSave} className="space-y-6">
-                                {/* Libellé Nom */}
-                                <div className="space-y-2">
-                                    <label className="text-xs font-black uppercase tracking-widest text-gray-400 ml-1">Nom du produit</label>
-                                    <input
-                                        className="w-full p-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white focus:ring-0 transition-all outline-none font-bold text-gray-700"
-                                        placeholder="ex: Clavier Mécanique RGB"
-                                        value={currentProduct.name}
-                                        onChange={e => setCurrentProduct({...currentProduct, name: e.target.value})}
-                                        required
-                                    />
-                                </div>
-
-                                {/* Libellé Description */}
-                                <div className="space-y-2">
-                                    <label className="text-xs font-black uppercase tracking-widest text-gray-400 ml-1">Description</label>
-                                    <textarea
-                                        className="w-full p-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white focus:ring-0 transition-all outline-none font-medium h-28"
-                                        placeholder="Décrivez les points forts du produit..."
-                                        value={currentProduct.description}
-                                        onChange={e => setCurrentProduct({...currentProduct, description: e.target.value})}
-                                    />
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-6">
-                                    {/* Libellé Prix */}
-                                    <div className="space-y-2">
-                                        <label className="text-xs font-black uppercase tracking-widest text-gray-400 ml-1">Prix (MAD)</label>
-                                        <div className="relative">
-                                            <input
-                                                type="number" step="0.01"
-                                                className="w-full p-4 pl-12 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white outline-none font-bold"
-                                                placeholder="0.00"
-                                                value={currentProduct.price}
-                                                onChange={e => setCurrentProduct({...currentProduct, price: e.target.value})}
-                                                required
-                                            />
-                                            <DollarSign className="w-5 h-5 text-gray-300 absolute left-4 top-1/2 -translate-y-1/2" />
-                                        </div>
-                                    </div>
-
-                                    {/* Libellé Stock */}
-                                    <div className="space-y-2">
-                                        <label className="text-xs font-black uppercase tracking-widest text-gray-400 ml-1">Stock</label>
-                                        <div className="relative">
-                                            <input
-                                                type="number"
-                                                className="w-full p-4 pl-12 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white outline-none font-bold"
-                                                placeholder="0"
-                                                value={currentProduct.stockQuantity}
-                                                onChange={e => setCurrentProduct({...currentProduct, stockQuantity: e.target.value})}
-                                                required
-                                            />
-                                            <Layers className="w-5 h-5 text-gray-300 absolute left-4 top-1/2 -translate-y-1/2" />
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <button type="submit" className="w-full bg-primary text-white p-5 rounded-2xl font-black text-lg flex items-center justify-center shadow-xl shadow-indigo-100 hover:shadow-indigo-300 hover:-translate-y-1 transition-all active:scale-95">
-                                    <Save className="w-6 h-6 mr-3" />
-                                    {currentProduct.id ? 'Appliquer les modifications' : 'Confirmer l\'ajout'}
-                                </button>
-                            </form>
+                    <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl p-10">
+                        <div className="flex justify-between items-center mb-8">
+                            <h3 className="text-2xl font-black">{currentProduct.id ? 'Modifier' : 'Ajouter'}</h3>
+                            <button onClick={() => setIsModalOpen(false)}><X /></button>
                         </div>
+                        <form onSubmit={handleSave} className="space-y-4">
+                            <input className="w-full p-4 bg-gray-50 rounded-2xl border-none font-bold" placeholder="Nom" value={currentProduct.name} onChange={e=>setCurrentProduct({...currentProduct, name: e.target.value})} required />
+                            <textarea className="w-full p-4 bg-gray-50 rounded-2xl border-none font-medium h-24" placeholder="Description" value={currentProduct.description} onChange={e=>setCurrentProduct({...currentProduct, description: e.target.value})} />
+                            <div className="grid grid-cols-2 gap-4">
+                                <input type="number" className="w-full p-4 bg-gray-50 rounded-2xl border-none font-bold" placeholder="Prix" value={currentProduct.price} onChange={e=>setCurrentProduct({...currentProduct, price: e.target.value})} required />
+                                <input type="number" className="w-full p-4 bg-gray-50 rounded-2xl border-none font-bold" placeholder="Stock" value={currentProduct.stockQuantity} onChange={e=>setCurrentProduct({...currentProduct, stockQuantity: e.target.value})} required />
+                            </div>
+                            <button type="submit" className="w-full bg-primary text-white p-5 rounded-2xl font-black text-lg shadow-xl shadow-indigo-100 flex justify-center"><Save className="mr-2"/> Confirmer</button>
+                        </form>
                     </div>
                 </div>
             )}

@@ -1,128 +1,117 @@
 import React, { useEffect, useState } from 'react';
 import api from '../services/api';
 import { useKeycloak } from '@react-keycloak/web';
-import { ClipboardList, Calendar, DollarSign, Tag, Search, Filter } from 'lucide-react';
+import { ShoppingBag, Calendar, List, X, Clock, CheckCircle, Hash, Loader2, Trash2 } from 'lucide-react';
+import toast, { Toaster } from 'react-hot-toast';
 
 const Orders = () => {
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [selectedOrder, setSelectedOrder] = useState(null); // Pour voir les produits d'une commande
+
     const { keycloak } = useKeycloak();
+    const isAdmin = keycloak.hasRealmRole('ADMIN');
 
-    useEffect(() => {
-        const fetchOrders = async () => {
+    const fetchOrders = async () => {
+        setLoading(true);
+        try {
+            const endpoint = isAdmin ? '/api/orders' : '/api/orders/my-orders';
+            const res = await api.get(endpoint);
+            setOrders(res.data);
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => { fetchOrders(); }, [isAdmin]);
+
+    const handleCancel = async (id) => {
+        if (window.confirm("Annuler définitivement cette commande ?")) {
             try {
-                // Déterminer l'URL selon le rôle (Point 5 du PDF)
-                const endpoint = keycloak.hasRealmRole('ADMIN')
-                    ? '/api/orders'
-                    : '/api/orders/my-orders';
+                await api.put(`/api/orders/${id}/cancel`);
+                toast.success("Commande annulée");
+                fetchOrders();
+            } catch (err) { toast.error("Impossible d'annuler"); }
+        }
+    };
 
-                const response = await api.get(endpoint);
-                setOrders(response.data);
-            } catch (error) {
-                console.error("Erreur lors de la récupération des commandes", error);
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchOrders();
-    }, [keycloak]);
-
-    if (loading) return <div className="flex justify-center p-20 text-primary font-bold animate-pulse">Chargement des données sécurisées...</div>;
+    if (loading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin text-primary w-12 h-12" /></div>;
 
     return (
-        <div className="space-y-8">
-            {/* Header Page */}
-            <div className="flex justify-between items-end">
-                <div>
-                    <h2 className="text-4xl font-black text-gray-900 tracking-tight">Commandes</h2>
-                    <p className="text-gray-500 font-medium">Suivi en temps réel des transactions du réseau.</p>
-                </div>
-                <div className="flex space-x-3">
-                    <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-sm">
-                        <Search className="w-5 h-5 text-gray-400" />
-                    </div>
-                    <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-sm">
-                        <Filter className="w-5 h-5 text-gray-400" />
-                    </div>
-                </div>
+        <div className="space-y-8 animate-in slide-in-from-bottom-10 duration-700">
+            <Toaster position="top-right" />
+            <div>
+                <h2 className="text-4xl font-black text-gray-900 tracking-tight">Vos Transactions</h2>
+                <p className="text-gray-500 font-medium">Historique complet de vos achats sécurisés.</p>
             </div>
 
-            {/* Table Section */}
-            <div className="bg-white rounded-[2rem] shadow-2xl shadow-gray-200/50 border border-gray-100 overflow-hidden">
-                <table className="w-full text-left border-collapse">
-                    <thead>
-                    <tr className="bg-gray-50/50 border-b border-gray-100">
-                        <th className="p-6 text-xs font-black uppercase tracking-widest text-gray-400">Référence</th>
-                        <th className="p-6 text-xs font-black uppercase tracking-widest text-gray-400">Date d'émission</th>
-                        <th className="p-6 text-xs font-black uppercase tracking-widest text-gray-400">Client ID</th>
-                        <th className="p-6 text-xs font-black uppercase tracking-widest text-gray-400">Montant Total</th>
-                        <th className="p-6 text-xs font-black uppercase tracking-widest text-gray-400">Statut</th>
-                    </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50">
-                    {orders.length === 0 ? (
-                        <tr>
-                            <td colSpan="5" className="p-20 text-center text-gray-300 italic font-medium">
-                                Aucune commande enregistrée dans le système.
-                            </td>
-                        </tr>
-                    ) : (
-                        orders.map((order) => (
-                            <tr key={order.id} className="hover:bg-indigo-50/30 transition-colors group">
-                                <td className="p-6">
-                                    <div className="flex items-center space-x-3">
-                                        <div className="p-2 bg-indigo-100 rounded-lg text-primary">
-                                            <ClipboardList className="w-4 h-4" />
+            <div className="grid gap-6">
+                {orders.map(order => (
+                    <div key={order.id} className="bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-sm flex flex-col md:flex-row justify-between items-center group">
+                        <div className="flex items-center space-x-6">
+                            <div className="p-5 bg-gray-50 text-primary rounded-2xl group-hover:bg-primary group-hover:text-white transition-colors duration-500">
+                                <ShoppingBag className="w-8 h-8" />
+                            </div>
+                            <div>
+                                <span className="text-[10px] font-black text-gray-300 uppercase tracking-widest block mb-1">#ORD-{order.id}</span>
+                                <h3 className="text-2xl font-black text-gray-800">{order.totalAmount.toLocaleString()} DH</h3>
+                                <div className="flex items-center text-gray-400 text-sm font-medium"><Calendar className="w-4 h-4 mr-2" />{new Date(order.createdAt).toLocaleDateString()}</div>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center space-x-4 mt-6 md:mt-0">
+                            <button onClick={() => setSelectedOrder(order)} className="bg-indigo-50 text-indigo-600 px-6 py-3 rounded-2xl font-bold flex items-center hover:bg-indigo-600 hover:text-white transition">
+                                <List className="w-5 h-5 mr-2" /> Détails ({order.productItems?.length})
+                            </button>
+
+                            {order.status === 'CREATED' && !isAdmin && (
+                                <button onClick={() => handleCancel(order.id)} className="p-3 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition">
+                                    <Trash2 className="w-5 h-5" />
+                                </button>
+                            )}
+
+                            <span className={`px-4 py-2 rounded-xl text-xs font-black flex items-center ${order.status === 'CREATED' ? 'bg-amber-50 text-amber-600' : order.status === 'CANCELED' ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                {order.status === 'CREATED' ? <Clock className="w-4 h-4 mr-2" /> : <CheckCircle className="w-4 h-4 mr-2" />}
+                                {order.status}
+              </span>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            {/* POPUP DÉTAILS DE LA COMMANDE (LISTE DES PRODUITS) */}
+            {selectedOrder && (
+                <div className="fixed inset-0 bg-secondary/50 backdrop-blur-md flex items-center justify-center z-50 p-6">
+                    <div className="bg-white w-full max-w-2xl rounded-[3rem] shadow-2xl p-10 animate-in zoom-in duration-300">
+                        <div className="flex justify-between items-center mb-8">
+                            <h3 className="text-3xl font-black uppercase tracking-tight">Contenu Commande #{selectedOrder.id}</h3>
+                            <button onClick={() => setSelectedOrder(null)} className="text-gray-300 hover:text-red-500"><X /></button>
+                        </div>
+
+                        <div className="space-y-4 max-h-96 overflow-y-auto pr-2">
+                            {selectedOrder.productItems.map((item, idx) => (
+                                <div key={idx} className="flex justify-between items-center p-6 bg-gray-50 rounded-3xl">
+                                    <div className="flex items-center space-x-4">
+                                        <Hash className="text-indigo-300 w-5 h-5" />
+                                        <div>
+                                            <p className="text-xs font-black text-gray-400 uppercase">Produit ID: {item.productId}</p>
+                                            <p className="text-lg font-black text-gray-800">{item.price} DH / unité</p>
                                         </div>
-                                        <span className="font-bold text-gray-700">#ORD-{order.id.toString().padStart(4, '0')}</span>
                                     </div>
-                                </td>
-                                <td className="p-6 text-gray-500 font-medium">
-                                    <div className="flex items-center">
-                                        <Calendar className="w-4 h-4 mr-2 text-gray-300" />
-                                        {new Date(order.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}
-                                    </div>
-                                </td>
-                                <td className="p-6">
-                                    <span className="text-xs font-mono bg-gray-100 px-2 py-1 rounded text-gray-500">{order.customerId.substring(0, 8)}...</span>
-                                </td>
-                                <td className="p-6">
-                                    <div className="flex items-center font-black text-gray-900 text-lg">
-                                        {order.totalAmount.toLocaleString()}
-                                        <span className="ml-1 text-primary text-xs font-bold">MAD</span>
-                                    </div>
-                                </td>
-                                <td className="p-6">
-                        <span className={`px-4 py-2 rounded-xl text-xs font-black flex items-center w-max ${
-                            order.status === 'CREATED'
-                                ? 'bg-amber-100 text-amber-700'
-                                : 'bg-emerald-100 text-emerald-700'
-                        }`}>
-                          <span className={`w-2 h-2 rounded-full mr-2 animate-pulse ${
-                              order.status === 'CREATED' ? 'bg-amber-500' : 'bg-emerald-500'
-                          }`}></span>
-                            {order.status}
-                        </span>
-                                </td>
-                            </tr>
-                        ))
-                    )}
-                    </tbody>
-                </table>
-            </div>
+                                    <div className="bg-primary text-white px-4 py-1 rounded-lg font-black text-sm">Quantité: {item.quantity}</div>
+                                </div>
+                            ))}
+                        </div>
 
-            {/* Stats Summary (Optionnel pour le look) */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-secondary p-8 rounded-[2rem] text-white">
-                    <p className="text-indigo-300 text-sm font-bold uppercase tracking-widest mb-2">Volume Total</p>
-                    <h3 className="text-3xl font-black">{orders.reduce((acc, curr) => acc + curr.totalAmount, 0).toLocaleString()} MAD</h3>
+                        <div className="mt-8 pt-8 border-t flex justify-between items-center">
+                            <span className="text-gray-400 font-bold uppercase tracking-widest">Total Facturé</span>
+                            <span className="text-4xl font-black text-primary">{selectedOrder.totalAmount} DH</span>
+                        </div>
+                    </div>
                 </div>
-                <div className="bg-white p-8 rounded-[2rem] border border-gray-100 shadow-sm">
-                    <p className="text-gray-400 text-sm font-bold uppercase tracking-widest mb-2">Commandes Actives</p>
-                    <h3 className="text-3xl font-black text-gray-900">{orders.length}</h3>
-                </div>
-            </div>
+            )}
         </div>
     );
 };
