@@ -14,12 +14,12 @@ public class ProductServiceApplication {
         SpringApplication.run(ProductServiceApplication.class, args);
     }
 
-    @Bean
+    /*@Bean
     CommandLineRunner start(ProductRepository productRepository) {
         return args -> {
             productRepository.save(new Product(null, "Ordinateur", "Macbook Pro", 25000, 10));
             productRepository.save(new Product(null, "Imprimante", "HP Laser", 3000, 5));
             productRepository.save(new Product(null, "Smartphone", "iPhone 15", 12000, 20));
         };
-    }
+    }*/
 }

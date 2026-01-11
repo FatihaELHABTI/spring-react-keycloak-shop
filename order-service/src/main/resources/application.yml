@@ -4,18 +4,34 @@ server:
 spring:
   application:
     name: order-service
+
   datasource:
     url: jdbc:postgresql://localhost:5434/order_db
     username: user
     password: password
+
   jpa:
     hibernate:
       ddl-auto: update
+
   security:
     oauth2:
       resourceserver:
         jwt:
           issuer-uri: http://localhost:8080/realms/ecom-realm
 
-# Activation de Feign
-spring.cloud.openfeign.client.config.default.loggerLevel: full
+eureka:
+  instance:
+    # Correctif : Force l'enregistrement par IP
+    prefer-ip-address: true
+    instance-id: ${spring.application.name}:${spring.cloud.client.ip-address}:${server.port}
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+
+# Configuration Feign
+feign:
+  client:
+    config:
+      default:
+        loggerLevel: full

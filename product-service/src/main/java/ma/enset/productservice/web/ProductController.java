@@ -7,6 +7,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/products")
@@ -51,5 +52,23 @@ public class ProductController {
     @PreAuthorize("hasRole('ADMIN')")
     public void deleteProduct(@PathVariable Long id) {
         productRepository.deleteById(id);
+    }
+    @PutMapping("/{id}/reduce-stock")
+    @PreAuthorize("hasRole('CLIENT')") // Le service commande propage le token client
+    public void reduceStock(@PathVariable Long id, @RequestParam int quantity) {
+        Product product = productRepository.findById(id).orElseThrow();
+        if (product.getStockQuantity() < quantity) {
+            throw new RuntimeException("Stock insuffisant");
+        }
+        product.setStockQuantity(product.getStockQuantity() - quantity);
+        productRepository.save(product);
+    }
+    @GetMapping("/stats")
+    @PreAuthorize("hasRole('ADMIN')")
+    public Map<String, Object> getProductStats() {
+        return Map.of(
+                "totalProducts", productRepository.count(),
+                "lowStock", productRepository.findAll().stream().filter(p -> p.getStockQuantity() < 5).count()
+        );
     }
 }

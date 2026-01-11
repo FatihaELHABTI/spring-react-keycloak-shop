@@ -4,14 +4,17 @@ server:
 spring:
   application:
     name: product-service
+
   datasource:
     url: jdbc:postgresql://localhost:5433/product_db
     username: user
     password: password
+
   jpa:
     hibernate:
       ddl-auto: update
     show-sql: true
+
   security:
     oauth2:
       resourceserver:
@@ -19,7 +22,15 @@ spring:
           issuer-uri: http://localhost:8080/realms/ecom-realm
           jwk-set-uri: http://localhost:8080/realms/ecom-realm/protocol/openid-connect/certs
 
-# Pour la traçabilité (Demandé au point 12 du PDF)
+eureka:
+  instance:
+    # Correctif : Force l'enregistrement par IP
+    prefer-ip-address: true
+    instance-id: ${spring.application.name}:${spring.cloud.client.ip-address}:${server.port}
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+
 logging:
   level:
     org.springframework.security: DEBUG

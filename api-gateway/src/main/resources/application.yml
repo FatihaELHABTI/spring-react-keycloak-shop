@@ -7,19 +7,13 @@ spring:
 
   cloud:
     gateway:
-      # Configuration globale CORS (doit être ici, sous gateway)
-      globalcors:
-        cors-configurations:
-          '[/**]':
-            allowedOrigins: "http://localhost:3000"
-            allowedMethods: "*"
-            allowedHeaders: "*"
+      httpclient:
+        # Correctif pour Windows : force l'utilisation du DNS système
+        use-netty-dns-resolver: false
 
-      # Filtres appliqués à toutes les routes
       default-filters:
         - TokenRelay
 
-      # Définition des routes vers les micro-services
       routes:
         - id: product-service
           uri: lb://product-service
@@ -31,7 +25,6 @@ spring:
           predicates:
             - Path=/api/orders/**
 
-  # Sécurité Keycloak
   security:
     oauth2:
       resourceserver:
@@ -39,8 +32,11 @@ spring:
           issuer-uri: http://localhost:8080/realms/ecom-realm
           jwk-set-uri: http://localhost:8080/realms/ecom-realm/protocol/openid-connect/certs
 
-# Configuration du client Eureka pour trouver le Discovery Service
 eureka:
+  instance:
+    # Correctif : Force l'enregistrement par IP
+    prefer-ip-address: true
+    instance-id: ${spring.application.name}:${spring.cloud.client.ip-address}:${server.port}
   client:
     service-url:
       defaultZone: http://localhost:8761/eureka/

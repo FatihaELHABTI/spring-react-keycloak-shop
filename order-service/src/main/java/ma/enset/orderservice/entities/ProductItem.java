@@ -15,4 +15,5 @@ public class ProductItem {
     @ManyToOne
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private Order order;
+    private String productName;
 }
