@@ -5,6 +5,15 @@ spring:
   application:
     name: product-service
 
+  management:
+    endpoints:
+      web:
+        exposure:
+          include: health, info, env
+    endpoint:
+      health:
+        show-details: always
+
   datasource:
     url: jdbc:postgresql://localhost:5433/product_db
     username: user

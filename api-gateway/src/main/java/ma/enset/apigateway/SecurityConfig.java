@@ -21,9 +21,10 @@ public class SecurityConfig {
     public SecurityWebFilterChain springSecurityFilterChain(ServerHttpSecurity http) {
         http
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
-                // Activation du CORS avec la configuration définie plus bas
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .authorizeExchange(exchanges -> exchanges
+                        // On autorise Actuator pour le suivi de l'état (Point 12.4)
+                        .pathMatchers("/actuator/**").permitAll()
                         .anyExchange().authenticated()
                 )
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()));
@@ -33,20 +34,10 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-
-        // Autorise ton frontend React
         config.setAllowedOrigins(Collections.singletonList("http://localhost:3000"));
-
-        // Autorise toutes les méthodes CRUD
         config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-
-        // Autorise tous les headers (notamment Authorization)
         config.setAllowedHeaders(Collections.singletonList("*"));
-
-        // Indispensable pour l'envoi du Token JWT
         config.setAllowCredentials(true);
-
-        // Durée de mise en cache de la réponse Preflight
         config.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

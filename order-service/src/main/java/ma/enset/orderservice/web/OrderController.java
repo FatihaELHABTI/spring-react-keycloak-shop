@@ -1,7 +1,6 @@
 package ma.enset.orderservice.web;
 
-
-
+import lombok.extern.slf4j.Slf4j;
 import ma.enset.orderservice.entities.Order;
 import ma.enset.orderservice.entities.OrderStatus;
 import ma.enset.orderservice.entities.ProductItem;
@@ -17,6 +16,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/orders")
 public class OrderController {
@@ -28,28 +28,34 @@ public class OrderController {
         this.productRestClient = productRestClient;
     }
 
-
-
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyRole('ADMIN', 'CLIENT')")
-    public Order getOrder(@PathVariable Long id) {
+    public Order getOrder(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
+        log.info("TRACE-LOG: Utilisateur [{}] consulte la commande #{}", jwt.getClaimAsString("preferred_username"), id);
         return orderRepository.findById(id).orElseThrow();
     }
 
     @GetMapping("/my-orders")
     @PreAuthorize("hasRole('CLIENT')")
     public List<Order> getMyOrders(@AuthenticationPrincipal Jwt jwt) {
+        String username = jwt.getClaimAsString("preferred_username");
+        log.info("TRACE-LOG: Utilisateur [{}] consulte son historique de commandes", username);
         return orderRepository.findByCustomerId(jwt.getSubject());
     }
 
     @GetMapping
     @PreAuthorize("hasRole('ADMIN')")
-    public List<Order> getAllOrders() {
+    public List<Order> getAllOrders(@AuthenticationPrincipal Jwt jwt) {
+        log.warn("TRACE-SECURITY: ADMIN [{}] liste TOUTES les commandes du système", jwt.getClaimAsString("preferred_username"));
         return orderRepository.findAll();
     }
+
     @PostMapping
     @PreAuthorize("hasRole('CLIENT')")
     public Order createOrder(@RequestBody List<ProductItem> items, @AuthenticationPrincipal Jwt jwt) {
+        String username = jwt.getClaimAsString("preferred_username");
+        log.info("TRACE-LOG: Utilisateur [{}] lance une création de commande ({} types de produits)", username, items.size());
+
         Order order = Order.builder()
                 .createdAt(new Date())
                 .status(OrderStatus.CREATED)
@@ -58,34 +64,40 @@ public class OrderController {
 
         double total = 0;
         for (ProductItem item : items) {
-            // 1. Appel au produit pour réduire le stock (PERSISTANCE)
+            // Réduction du stock via Feign
             productRestClient.reduceStock(item.getProductId(), item.getQuantity());
 
-            // 2. Récupérer le prix pour le total
             Product p = productRestClient.getProductById(item.getProductId());
             item.setProductName(p.getName());
             item.setPrice(p.getPrice());
             item.setOrder(order);
             total += p.getPrice() * item.getQuantity();
+
+            log.debug("Détail Commande: Produit {} ajouté (Qté: {})", p.getName(), item.getQuantity());
         }
         order.setProductItems(items);
         order.setTotalAmount(total);
-        return orderRepository.save(order);
+
+        Order savedOrder = orderRepository.save(order);
+        log.info("TRACE-SUCCESS: Commande #{} enregistrée pour [{}] - Total: {} DH", savedOrder.getId(), username, total);
+        return savedOrder;
     }
 
     @PutMapping("/{id}/cancel")
     @PreAuthorize("hasRole('CLIENT')")
-    public Order cancelOrder(@PathVariable Long id) {
+    public Order cancelOrder(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
+        log.warn("TRACE-LOG: Utilisateur [{}] demande l'annulation de la commande #{}", jwt.getClaimAsString("preferred_username"), id);
         Order order = orderRepository.findById(id).orElseThrow();
-        if (order.getStatus() == OrderStatus.CANCELED) throw new RuntimeException("Déjà annulée");
+        if (order.getStatus() == OrderStatus.CANCELED) throw new RuntimeException("Commande déjà annulée");
 
         order.setStatus(OrderStatus.CANCELED);
-        // Note: Dans un vrai système, on devrait ici ré-augmenter le stock (ProductRestClient.increaseStock)
         return orderRepository.save(order);
     }
+
     @GetMapping("/stats")
-    @PreAuthorize("hasRole('ADMIN')") // Seul l'admin voit le CA global
-    public Map<String, Object> getOrderStats() {
+    @PreAuthorize("hasRole('ADMIN')")
+    public Map<String, Object> getOrderStats(@AuthenticationPrincipal Jwt jwt) {
+        log.info("TRACE-LOG: ADMIN [{}] accède aux statistiques financières globales", jwt.getClaimAsString("preferred_username"));
         List<Order> orders = orderRepository.findAll();
         double totalRevenue = orders.stream()
                 .filter(o -> o.getStatus() != OrderStatus.CANCELED)
@@ -96,10 +108,12 @@ public class OrderController {
                 "canceledOrders", orders.stream().filter(o -> o.getStatus() == OrderStatus.CANCELED).count()
         );
     }
+
     @GetMapping("/my-stats")
     @PreAuthorize("hasRole('CLIENT')")
     public Map<String, Object> getMyPersonalStats(@AuthenticationPrincipal Jwt jwt) {
-        String clientId = jwt.getSubject(); // On récupère l'ID du client depuis le JWT
+        String clientId = jwt.getSubject();
+        log.info("TRACE-LOG: Client [{}] consulte son tableau de bord personnel", jwt.getClaimAsString("preferred_username"));
         List<Order> myOrders = orderRepository.findByCustomerId(clientId);
 
         double totalSpent = myOrders.stream()
