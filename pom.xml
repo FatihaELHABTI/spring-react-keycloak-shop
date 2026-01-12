@@ -7,11 +7,42 @@
     <groupId>ma.enset</groupId>
     <artifactId>e-commerce-microservices</artifactId>
     <version>1.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+
+    <modules>
+        <module>discovery-service</module>
+        <module>api-gateway</module>
+        <module>product-service</module>
+        <module>order-service</module>
+    </modules>
 
     <properties>
-        <maven.compiler.source>21</maven.compiler.source>
-        <maven.compiler.target>21</maven.compiler.target>
+        <java.version>17</java.version>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <lombok.version>1.18.34</lombok.version>
+
+        <!-- Configuration DevSecOps via Propriétés (Plus propre pour l'IDE) -->
+        <dependencyCheck.nvdApiAnalyzerEnabled>false</dependencyCheck.nvdApiAnalyzerEnabled>
+        <dependencyCheck.ossIndexAnalyzerEnabled>true</dependencyCheck.ossIndexAnalyzerEnabled>
+        <dependencyCheck.failOnError>false</dependencyCheck.failOnError>
     </properties>
 
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.owasp</groupId>
+                <artifactId>dependency-check-maven</artifactId>
+                <version>9.0.9</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
 </project>
